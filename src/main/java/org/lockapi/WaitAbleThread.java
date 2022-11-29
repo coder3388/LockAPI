@@ -19,7 +19,7 @@ public class WaitAbleThread extends Thread{
             System.out.println( Thread.currentThread().getName()+" acquired the lock");
             while (  !releaseLockCommandForFirstThread.get() ){
                 System.out.println( Thread.currentThread().getName()+" waiting unlock command");
-                LockHelper.sleepCurrThread( 1000 );
+                LockHelper.sleepCurrThread( 10 );
             }
         } finally {
             LockHelper.unLock( reentrantLock );

@@ -25,16 +25,18 @@ public class ReentrantLockTest {
 
     @Test
     void given3ThreadAndFairnessLockObject_whenThreadsTryToLockTheLockObjectRespectively_thenLongestWaitingThreadShouldBeAcquiredTheLock(){
-        ReentrantLock reentrantLock = new ReentrantLock(true);
+        final ReentrantLock reentrantLock = new ReentrantLock(true);
+        final AtomicBoolean releaseLockCommandForThread = new AtomicBoolean( false );
         Thread firstThreadThatAcquiredTheLock = new Thread("FirstThread") {
             public void run(){
                 try {
                     LockHelper.lock( reentrantLock );
                     System.out.println( Thread.currentThread().getName()+" acquired the lock");
-                    Thread.sleep( 10*1000 );
-                } catch ( InterruptedException e ) {
-                    throw new RuntimeException( e );
-                }finally {
+                    while (  !releaseLockCommandForThread.get() ){
+                        System.out.println( Thread.currentThread().getName()+" waiting unlock command");
+                        LockHelper.sleepCurrThread( 10 );
+                    }
+                } finally {
                     LockHelper.unLock( reentrantLock );
                 }
             }
@@ -42,6 +44,7 @@ public class ReentrantLockTest {
         firstThreadThatAcquiredTheLock.start();
 
         List<String> lockAcquiredThreads = Collections.synchronizedList( new ArrayList<>( ) );
+        //--create a thread every 1 second
         for ( int i = 0; i <2; i++ ) {
             Thread thread = new Thread("Thread"+i) {
                 public void run(){
@@ -59,6 +62,9 @@ public class ReentrantLockTest {
             //--current thread going to sleep as much as 1 second.
             LockHelper.sleepCurrThread( 1000);
         }
+        //--allow first thread to release the lock
+        releaseLockCommandForThread.set( true );
+
         while ( reentrantLock.isLocked() || lockAcquiredThreads.size()<2 ){
             System.out.println("waiting for the all thread to finish their work..." );
             LockHelper.sleepCurrThread(1000 );
@@ -69,41 +75,49 @@ public class ReentrantLockTest {
     @Test
     void givenALockObject_whenComparingLockAndTryLock_thenTryLockMethodShouldFasterThanLockMethod(){
         final ReentrantLock reentrantLock = new ReentrantLock(true);
-        final AtomicBoolean releaseLockCommandForFirstThread = new AtomicBoolean( false );
-        WaitAbleThread waitAbleThread = new WaitAbleThread(reentrantLock, "WaitAbleThread", releaseLockCommandForFirstThread);
+        final AtomicBoolean releaseLockCommandForThread = new AtomicBoolean( false );
+
+        //----------------calculate lock() duration-----------------------
+        WaitAbleThread waitAbleThread = new WaitAbleThread(reentrantLock, "WaitAbleThread", releaseLockCommandForThread);
         waitAbleThread.start();
 
-        MonitorAbleThreadUsesLockMethod secondThreadThatAcquiredTheLock = new MonitorAbleThreadUsesLockMethod(reentrantLock,"SecondThread") ;
-        secondThreadThatAcquiredTheLock.start();
+        MonitorAbleThreadUsesLockMethod firstThreadThatAcquiredTheLock = new MonitorAbleThreadUsesLockMethod(reentrantLock,"FirstThread") ;
+        firstThreadThatAcquiredTheLock.start();
 
-        while ( secondThreadThatAcquiredTheLock.getThreadStartToAcquireTheLockAt()==null ){
-            LockHelper.sleepCurrThread( 1000 );
+        //--wait for the current thread to be ready for the first thread to get the lock.
+        while ( firstThreadThatAcquiredTheLock.getThreadStartToAcquireTheLockAt()==null ){
+            LockHelper.sleepCurrThread( 10 );
         }
 
-        releaseLockCommandForFirstThread.set( true );
+        //--allow first thread to get the lock
+        releaseLockCommandForThread.set( true );
 
-        while ( secondThreadThatAcquiredTheLock.getThreadAcquiredTheLockAt()==null ){
-            LockHelper.sleepCurrThread( 1000 );
+        //--suspend the current thread until the first thread gets the lock.
+        while ( firstThreadThatAcquiredTheLock.getThreadAcquiredTheLockAt()==null ){
+            LockHelper.sleepCurrThread( 10 );
         }
-        //--------------------------------------------------
-        releaseLockCommandForFirstThread.set( false );
-        WaitAbleThread waitAbleThread2 = new WaitAbleThread(reentrantLock, "WaitAbleThread-2", releaseLockCommandForFirstThread);
+        //----------------calculate tryLock() duration-----------------------
+        releaseLockCommandForThread.set( false );
+        WaitAbleThread waitAbleThread2 = new WaitAbleThread(reentrantLock, "WaitAbleThread-2", releaseLockCommandForThread);
         waitAbleThread2.start();
 
-        MonitorAbleThreadUsesTryLockMethod thirdThreadThaTryToAcquiredTheLock = new MonitorAbleThreadUsesTryLockMethod(reentrantLock,"ThirdThread") ;
-        thirdThreadThaTryToAcquiredTheLock.start();
+        MonitorAbleThreadUsesTryLockMethod secondThreadThaTryToAcquiredTheLock = new MonitorAbleThreadUsesTryLockMethod(reentrantLock,"SecondThread") ;
+        secondThreadThaTryToAcquiredTheLock.start();
 
-        while ( thirdThreadThaTryToAcquiredTheLock.getThreadStartToAcquireTheLockAt()==null ){
-            LockHelper.sleepCurrThread( 1000 );
+        //--wait for the current thread to be ready for the second thread to get the lock.
+        while ( secondThreadThaTryToAcquiredTheLock.getThreadStartToAcquireTheLockAt()==null ){
+            LockHelper.sleepCurrThread( 10 );
         }
 
-        releaseLockCommandForFirstThread.set( true );
+        //--allow second thread to get the lock
+        releaseLockCommandForThread.set( true );
 
-        while ( thirdThreadThaTryToAcquiredTheLock.getThreadTriedToAcquireTheLockAt()==null ){
-            LockHelper.sleepCurrThread( 1000 );
+        //--suspend the current thread until the second thread gets the lock.
+        while ( secondThreadThaTryToAcquiredTheLock.getThreadTriedToAcquireTheLockAt()==null ){
+            LockHelper.sleepCurrThread( 10 );
         }
 
-        assertTrue( secondThreadThatAcquiredTheLock.getAcquireLockDuration().toNanos()>  thirdThreadThaTryToAcquiredTheLock.getTryAcquireLockDuration().toNanos() );
+        assertTrue( firstThreadThatAcquiredTheLock.getAcquireLockDuration().toNanos()>  secondThreadThaTryToAcquiredTheLock.getTryAcquireLockDuration().toNanos() );
 
     }
 
